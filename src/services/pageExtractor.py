@@ -63,7 +63,6 @@ class PageExtractor:
                 if s.can_handle(page):
                     return s
             except Exception:
-                # si una estrategia falla en can_handle, probamos la siguiente
                 continue
         return self._strategies[-1]
 
@@ -74,4 +73,4 @@ class PageExtractor:
             return "native_text"
         if "ocr" in name:
             return "ocr"
-        return name  # permite nuevas estrategias sin tocar este módulo
+        return name  

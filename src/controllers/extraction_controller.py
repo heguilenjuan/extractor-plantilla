@@ -7,9 +7,13 @@ from src.services.pdfProcessor import PdfProcessor
 from src.services.pageExtractor import PageExtractor
 from src.services.extractors.native import NativeExtractor
 from src.services.extractors.ocr import OCRExtractor
-from src.services.Template.template_manager import TemplateManager
+
+from src.services.templates_pdf.engine import TemplateEngine
+from src.services.templates_pdf.repo import JsonTemplateRepository
 
 router = APIRouter(prefix="/api/v1", tags=["Extraction"])
+
+# -------------------- Dependencias --------------------
 
 
 def get_uploads() -> Uploads:
@@ -21,8 +25,12 @@ def get_pdf_processor() -> PdfProcessor:
     return PdfProcessor(page_extractor)
 
 
-def get_template_manager() -> TemplateManager:
-    return TemplateManager()
+def get_template_engine() -> TemplateEngine:
+    # Ajusta la ruta si queres guardar en otro lugar
+    repo = JsonTemplateRepository("./data/templates.json")
+    return TemplateEngine(repo)
+
+# -------------------- Endpoints --------------------
 
 
 @router.post("/extract-text")
@@ -32,7 +40,6 @@ async def extract_text_from_pdf(
     pdf: PdfProcessor = Depends(get_pdf_processor),
 ):
     """Extraccion automatica (elige natuvo u OCR por pagina.)"""
-
     # Guarda temporal y procesa
     tmp_path = uploads.save_temp_pdf(file)
     try:
@@ -51,13 +58,8 @@ async def extract_text_with_template(
     file: UploadFile = File(...),
     uploads: Uploads = Depends(get_uploads),
     pdf: PdfProcessor = Depends(get_pdf_processor),
-    template_manager: TemplateManager = Depends(get_template_manager)
+    tpl_engine: TemplateEngine = Depends(get_template_engine),
 ):
-    """Extraccion y luego aplicacion de una plantilla especifica"""
-    # Validacion
-    if not template_manager.template_exists(plantilla_id):
-        raise HTTPException(
-            status_code=404, detail=f"Plantilla '{plantilla_id}'")
 
     tmp_path = uploads.save_temp_pdf(file)
     try:
@@ -66,23 +68,32 @@ async def extract_text_with_template(
         # Reunir todos los blocks de paginas nativas
         all_blocks: List[Dict] = []
         for p in result.get("pages", []):
-            if p.get("strategy_used") == "native_text":
-                all_blocks.extend(p.get("blocks", []))
+            all_blocks.extend(p.get("blocks", []) or [])
 
-        # Aplicar plantilla si hay bloques
-        if all_blocks:
-            # Si tu manager usa 'proveedor' como el id de plantilla
-            tpl_result = template_manager.extract_with_template(
-                all_blocks, template_type="factura", proveedor=plantilla_id
-            )
-            result["template_based_extraction"] = tpl_result
-        else:
-            result["template_based_extraction"] = {
-                "warning": "No hay bloques nativos para aplicar la plantilla.",
-                "plantilla": plantilla_id
+        if not all_blocks:
+            # No hay palabras detectadas (ni nativo ni OCR)
+            result["template_base_extraction"] = {
+                "warning": "No se encontraron bloques de texto para aplicar la plantilla.",
+                "plantilla": plantilla_id,
             }
+            return JSONResponse(content=result)
 
+        try:
+            values = tpl_engine.apply(plantilla_id, all_blocks)
+            result["template_based_extraction"] = {
+                "plantilla": plantilla_id,
+                "values": values
+            }
+        except ValueError as ve:
+            raise HTTPException(status_code=404, detail=str(ve))
+        except Exception as e:
+            result["template_base_extraction"] = {
+                "error": f"Error aplicando plantilla: {str(e)}",
+                "plantilla": plantilla_id,
+            }
         return JSONResponse(content=result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error en extraccion con plantilla: {str(e)} ")

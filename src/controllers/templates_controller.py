@@ -1,42 +1,31 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
-from src.services.Template.template_manager import TemplateManager
+from typing import Dict, Any, List
+from src.services.templates_pdf.schemas import Template
+from src.services.templates_pdf.repo import JsonTemplateRepository
+from src.services.templates_pdf.engine import TemplateEngine
+from src.services.templates_pdf.builder import TemplateBuilder
 
-router = APIRouter(prefix="/api/v1", tags=["Templates"])
+router = APIRouter(prefix="/api/v1/templates", tags=["Templates"])
+engine = TemplateEngine(JsonTemplateRepository("./data/templates.json"))
 
-template_manager = TemplateManager()
+@router.get("")
+def list_templates(): return {"templates": engine.list_ids()}
 
-@router.get("/plantillas")
-async def get_available_templates():
-    """Obtiene el listado de plantillas disponibles"""
+@router.post("")
+def create_template(payload: Dict[str, Any]):
     try:
-        templates = template_manager.get_all_templates_info()
-        return JSONResponse(content={"plantillas": templates})
+        tpl = TemplateBuilder.from_selections(payload["id"], payload["selections"])
+        tpl.meta = payload.get("meta", {})
+        engine.create_or_update(tpl)
+        return {"ok": True, "id":tpl.id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo plantillas: {str(e)}")
-
-@router.get("/plantillas/{plantilla_id}")
-async def get_template_detail(plantilla_id: str):
-    """Obtiene información detallada de una plantilla específica"""
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@router.post("/anchors")
+def create_template_by_anchors(payload: Dict[str, Any]):
     try:
-        if not template_manager.template_exists(plantilla_id):
-            raise HTTPException(status_code=404, detail="Plantilla no encontrada")
-        
-        template_info = template_manager.get_template_info(plantilla_id)
-        return JSONResponse(content=template_info)
-    except HTTPException:
-        raise
+        tpl = TemplateBuilder.from_anchors(payload["id"], payload["anchors"],payload["blocks"])
+        engine.create_or_update(tpl)
+        return {"ok": True, "id":tpl.id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo plantilla: {str(e)}")
-
-@router.get("/plantillas/{plantilla_id}/campos")
-async def get_template_fields(plantilla_id: str):
-    """Obtiene los campos que extrae una plantilla específica"""
-    try:
-        if not template_manager.template_exists(plantilla_id):
-            raise HTTPException(status_code=404, detail="Plantilla no encontrada")
-        
-        fields = template_manager.get_template_fields(plantilla_id)
-        return JSONResponse(content={"campos": fields})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo campos: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
