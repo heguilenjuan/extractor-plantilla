@@ -3,3 +3,6 @@ pymupdf
 Pillow
 pytesseract
 requests
+python-dotenv
+pydantic
+pyodbc

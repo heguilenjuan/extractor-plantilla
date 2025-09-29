@@ -1,34 +1,45 @@
+from uuid import uuid4
 from typing import Dict, List
-from .schemas import Template, TemplateField
+from .schemas import Box, Template, TemplateField
 
 
 class TemplateBuilder:
-    @staticmethod
-    def from_selections(template_id: str, selections: List[Dict]) -> Template:
-        fields = {
-            s["name"]: TemplateField(
-                page=int(s["page"]),
-                box=tuple(s["box"]),
-                pad=int(s.get("pad", 2)),
-                regex=s.get("regex"),
-                cast=s.get("cast")
-            )
-            for s in selections
-        }
-        return Template(id=template_id, fields=fields)
+    def __init__(self, name: str):
+        self.template = Template(
+            id=str(uuid4()),
+            name=name,
+            boxes=[],
+            fields=[],
+            meta={}
+        )
 
-    @staticmethod
-    def from_anchors(template_id: str, anchors: List[Dict], blocks: List[Dict]) -> Template:
-        fields = {}
-        for a in anchors:
-            page = a["page"]
-            matches = [b for b in blocks if b["page"] ==
-                       page and a["anchor_text"].lower() in (b["text"] or "").lower()]
-            if not matches:
-                continue
-            x0, y0, x1, y1 = matches[0]["coordinates"]
-            bx = (x1 + a["dx"], y0 + a["dy"], x1 +
-                  a["dx"] + a["w"], y0 + a["dy"] + a["h"])
-            fields[a["name"]] = TemplateField(
-                page=page, box=bx, pad=int(a.get("pad", 2)))
-        return Template(id=template_id, fields=fields)
+    def add_box(self, x: float, y: float, w: float, h: float, name: str = None, page: int = 1):
+        box = Box(
+            id=str(uuid4()),
+            x=x,
+            y=y,
+            w=w,
+            h=h,
+            page=page
+        )
+        self.template.boxes.append(box)
+        return box.id
+
+    def add_field(self, box_id: str, key: str, regex: str = None, cast: str = None, required: bool = True):
+        field = TemplateField(
+            id=str(uuid4()),
+            boxId=box_id,
+            key=key,
+            regex=regex,
+            cast=cast,
+            required=required
+        )
+        self.template.fields.append(field)
+        return self
+
+    def set_meta(self, meta: dict):
+        self.template.meta.update(meta)
+        return self
+
+    def build(self):
+        return self.template
