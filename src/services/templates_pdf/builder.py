@@ -1,3 +1,4 @@
+#Builder
 from uuid import uuid4
 from typing import Dict, List
 from .schemas import Box, Template, TemplateField
@@ -20,7 +21,8 @@ class TemplateBuilder:
             y=y,
             w=w,
             h=h,
-            page=page
+            page=page,
+            name=name
         )
         self.template.boxes.append(box)
         return box.id

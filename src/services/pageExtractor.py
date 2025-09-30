@@ -16,21 +16,27 @@ class PageExtractor:
 
     def extract(self, page, page_num: int) -> Dict:
         """
-        Retorna un resultado estructurado de la página:
-
+        Retorna:
         {
           "page_number": int,
           "strategy_used": "native_text" | "ocr" | <otro>,
+          "page_width": float,            # <-- nuevo
+          "page_height": float,           # <-- nuevo
           "text": str,
           "character_count": int,
           "has_images": bool,
-          "blocks": List[Dict],     # solo para nativo (puede ser [])
+          "blocks": List[Dict],           # cada block incluye page_width/page_height
           "error": str | None
         }
         """
+        
+        pw = float(page.rect.width)
+        ph = float(page.rect.height)
         result = {
             "page_number": page_num,
             "strategy_used": None,
+            "page_width": pw,
+            "page_height":ph,
             "text": "",
             "character_count": 0,
             "has_images": bool(len(page.get_images()) > 0),
@@ -42,16 +48,24 @@ class PageExtractor:
             extractor = self._select_strategy(page)
             text, blocks = extractor.extract(page, page_num)
 
+            # asegura que cada block tenga page_width/page_height
+            patched_blocks = []
+            for b in (blocks or []):
+                b = dict(b)
+                b.setdefault("page", page_num)
+                b.setdefault("page_width", pw)
+                b.setdefault("page_height", ph)
+                if "coordinates" in b:
+                    b["coordinates"] = list(b["coordinates"])
+                patched_blocks.append(b)
+            
             result["text"] = text or ""
             result["character_count"] = len(result["text"])
-            result["blocks"] = blocks or []
+            result["blocks"] = patched_blocks
             result["strategy_used"] = self._strategy_name(extractor)
 
         except Exception as e:
-            # No interrumpimos el procesamiento del PDF completo;
-            # devolvemos el error a nivel de página.
             result["error"] = str(e)
-
         return result
 
     # -------------------- helpers --------------------

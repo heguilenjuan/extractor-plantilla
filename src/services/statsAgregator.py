@@ -1,6 +1,5 @@
 class StatsAggregator:
     """Acumula metricas de extracion a nivel PDF."""
-
     def __init__(self):
         self._native_pages = 0
         self._ocr_pages = 0

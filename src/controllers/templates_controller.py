@@ -63,28 +63,7 @@ def create_template(payload: Dict[str, Any]):
         print("❌ Error en create_template:", str(e))  # ← Agregar logging
         raise HTTPException(status_code=400, detail=str(e))
     
-    
-    
-@router.post("/{template_id}/apply")
-def apply_template(
-    template_id: str,
-    payload: Dict[str, Any]
-):
-    """Aplicar plantilla a bloques de texto extraídos"""
-    try:
-        blocks = payload.get("blocks", [])
-        result = template_engine.apply_template(template_id, blocks)
-        return {
-            "ok": True,
-            "template_id": template_id,
-            "extracted_data": result
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error al aplicar plantilla: {str(e)}")
-
+     
 @router.delete("/{template_id}")
 def delete_template(template_id: str):
     """Eliminar una plantilla"""

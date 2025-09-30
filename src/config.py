@@ -2,8 +2,14 @@
 import os
 from dotenv import load_dotenv
 import pyodbc
-
+from src.services.templates_pdf.engine import TemplateEngine
+from src.services.templates_pdf.repo import SQLTemplateRepository
 load_dotenv()
+
+
+def create_template_engine():
+    repo = SQLTemplateRepository()
+    return TemplateEngine(repo=repo)
 
 
 def get_db_connection_string():
@@ -49,7 +55,7 @@ def get_db_connection_string():
 
     # Opción 2: Con usuario/contraseña
     return (
-         f"DRIVER={{{driver}}};"
+        f"DRIVER={{{driver}}};"
         f"SERVER={server};"
         f"DATABASE={database};"
         f"UID={username};"

@@ -1,13 +1,10 @@
-# services/uploads.py
 import os
 import tempfile
 import time
 from fastapi import UploadFile, HTTPException
 
-
 class Uploads:
     """Servicio para manejar archivos temporales subidos."""
-
     def save_temp_pdf(self, file: UploadFile) -> str:
         """
         Valida que el archivo sea PDF y lo guarda como archivo temporal.

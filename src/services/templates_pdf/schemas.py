@@ -1,3 +1,5 @@
+#SCHEMA
+
 from typing import Dict, Any, List, Tuple, Optional
 from pydantic import BaseModel, Field
 
@@ -15,7 +17,7 @@ class TemplateField(BaseModel):
     boxId: str
     key: str
     required: bool = True
-    normalizers: List[str] = []
+    normalizers: List[str] = Field(default_factory=list)
     regex: Optional[str] = None
     cast: Optional[str] = None
 
@@ -23,5 +25,5 @@ class Template(BaseModel):
     id: str
     name: str
     boxes: List[Box] = Field(default_factory=list)
-    fields: List[TemplateField] = Field(default_factory=list)  # ← CAMBIAR A List
-    meta: Dict[str, Any] = {}
+    fields: List[TemplateField] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)

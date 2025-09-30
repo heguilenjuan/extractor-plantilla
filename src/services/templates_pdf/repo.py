@@ -1,10 +1,10 @@
+#REPO
 import pyodbc
 import json
 import os
 import threading
 from typing import Dict, List, Optional
 from .schemas import Box, Template, TemplateField
-from ...config import get_db_connection_string
 
 class JsonTemplateRepository:
     def __init__(self, path="./data/templates.json"):
@@ -37,8 +37,7 @@ class JsonTemplateRepository:
 
 class SQLTemplateRepository:
     def __init__(self, connection_string: str = None):
-        self.conn_string = connection_string or get_db_connection_string()
-
+        self.conn_string = connection_string 
     def get_connection(self):
         return pyodbc.connect(self.conn_string)
 
@@ -92,7 +91,7 @@ class SQLTemplateRepository:
     def list_ids(self) -> List[str]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name FROM pdf_templates ORDER BY name")
+            cursor.execute("SELECT id, name FROM cmPdfTemplates ORDER BY name")
             return [row[0] for row in cursor.fetchall()]
 
     def list_all(self) -> List[dict]:

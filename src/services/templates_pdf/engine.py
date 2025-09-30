@@ -1,7 +1,7 @@
+#Engine
 from .repo import SQLTemplateRepository
 from .applier import TemplateApplier
 from .schemas import Template
-
 
 class TemplateEngine:
     def __init__(self, repo: SQLTemplateRepository):
@@ -9,8 +9,7 @@ class TemplateEngine:
         self.applier = TemplateApplier()
 
     def create_or_update(self, template_data: dict):
-        # convertir del front al template
-        template = Template(**template_data)
+        template = Template(**template_data)  # valida contra schemas
         self.repo.upsert(template)
         return {"status": "success", "id": template.id}
 
