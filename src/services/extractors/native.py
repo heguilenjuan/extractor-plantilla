@@ -1,3 +1,6 @@
+# extractors/native
+
+
 from typing import Tuple, List, Dict
 from .base import IPageExtractor
 from .native_text import extract_text_from_page, extract_text_blocks_from_page

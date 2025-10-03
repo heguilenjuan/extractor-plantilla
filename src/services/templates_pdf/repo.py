@@ -1,43 +1,13 @@
-#REPO
+# REPO
 import pyodbc
 import json
-import os
-import threading
-from typing import Dict, List, Optional
+from typing import List, Optional
 from .schemas import Box, Template, TemplateField
-
-class JsonTemplateRepository:
-    def __init__(self, path="./data/templates.json"):
-        self.path = path
-        self._lock = threading.Lock()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        if not os.path.exists(path):
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump({}, f)
-
-    def _load(self) -> Dict[str, dict]:
-        with self._lock, open(self.path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    def _save(self, data: Dict[str, dict]):
-        with self._lock, open(self.path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-    def upsert(self, tpl: Template):
-        data = self._load()
-        data[tpl.id] = tpl.model_dump()
-        self._save(data)
-
-    def get(self, template_id: str) -> Optional[Template]:
-        raw = self._load().get(template_id)
-        return Template(**raw) if raw else None
-
-    def list_ids(self): return list(self._load().keys())
-
 
 class SQLTemplateRepository:
     def __init__(self, connection_string: str = None):
-        self.conn_string = connection_string 
+        self.conn_string = connection_string
+
     def get_connection(self):
         return pyodbc.connect(self.conn_string)
 
@@ -46,7 +16,8 @@ class SQLTemplateRepository:
             cursor = conn.cursor()
             # Serializar boxes y fields como JSON
             boxes_json = json.dumps([box.dict() for box in template.boxes])
-            fields_json = json.dumps([field.dict() for field in template.fields])
+            fields_json = json.dumps([field.dict()
+                                     for field in template.fields])
             meta_json = json.dumps(template.meta) if template.meta else "{}"
 
             cursor.execute("""
@@ -77,8 +48,10 @@ class SQLTemplateRepository:
                 return None
 
             # Parsear JSON directamente
-            boxes = [Box(**box_data) for box_data in json.loads(row.boxes_data)]
-            fields = [TemplateField(**field_data) for field_data in json.loads(row.fields_data)]
+            boxes = [Box(**box_data)
+                     for box_data in json.loads(row.boxes_data)]
+            fields = [TemplateField(**field_data)
+                      for field_data in json.loads(row.fields_data)]
 
             return Template(
                 id=row.id,

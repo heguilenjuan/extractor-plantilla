@@ -1,5 +1,5 @@
 # src/api/controllers/extract_text.py
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 
 from src.services.uploads import Uploads
@@ -14,7 +14,6 @@ from src.services.templates_pdf.engine import TemplateEngine
 router = APIRouter(prefix="/api/v1/extract-text", tags=["Extraction"])
 
 # -------------------- Dependencias --------------------
-
 def get_uploads() -> Uploads:
     return Uploads()
 
@@ -47,21 +46,45 @@ async def extract_text_from_pdf(
 async def extract_text_with_template(
     plantilla_id: str,
     file: UploadFile = File(...),
+    debug: bool = Query(False, description="Devuelve info de anclas y transformaciones"),
     uploads: Uploads = Depends(get_uploads),
     pdf: PdfProcessor = Depends(get_pdf_processor),
     tpl_engine: TemplateEngine = Depends(get_template_engine),
 ):
-    """Extraer texto de PDF aplicando una plantilla específica (usando blocks)"""
+    """
+    Extrae texto y aplica una plantilla. Devuelve:
+      - result.pages (lo que devuelva tu PdfProcessor)
+      - template_based_extraction con values y, si debug=True, anclas/transform.
+    """
     tmp_path = uploads.save_temp_pdf(file)
     try:
-        # 1) extracción general (para stats y obtener blocks)
+        # 1) Extracción general (nativa/OCR) para obtener blocks por página
         result = pdf.process(tmp_path)
 
-        # 2) Aplanar blocks de todas las páginas
+        # 2) Aplanar blocks asegurando metadatos de tamaño y origen top-left
         all_blocks = []
-        for p in result.get("pages", []):
-            blocks = p.get("blocks") or []
-            all_blocks.extend(blocks)
+        pages = result.get("pages", []) or []
+        for idx, p in enumerate(pages, start=1):
+            # tamaños de página si vienen
+            pw = p.get("width") or p.get("page_width")
+            ph = p.get("height") or p.get("page_height")
+            page_num = int(p.get("page", idx))
+            origin = (p.get("origin") or "top-left").lower()
+
+            for blk in (p.get("blocks") or []):
+                x0, y0, x1, y1 = blk.get("coordinates", [0,0,0,0])
+
+                # Si el extractor trae origen bottom-left, convertir a top-left
+                if origin == "bottom-left" and ph:
+                    y0, y1 = float(ph) - float(y1), float(ph) - float(y0)
+
+                all_blocks.append({
+                    "page": page_num,
+                    "coordinates": [float(x0), float(y0), float(x1), float(y1)],
+                    "text": blk.get("text", "") or "",
+                    "page_width": float(pw) if pw else None,
+                    "page_height": float(ph) if ph else None,
+                })
 
         if not all_blocks:
             result["template_based_extraction"] = {
@@ -70,16 +93,17 @@ async def extract_text_with_template(
             }
             return JSONResponse(content=result)
 
-        # 3) Aplicar plantilla con los blocks
+        # 3) Aplicar plantilla con anclas (incluye cálculo de T por página)
         try:
-            values = tpl_engine.apply_template(plantilla_id, all_blocks)
+            values = tpl_engine.apply_template(plantilla_id, all_blocks, include_debug=debug)
             result["template_based_extraction"] = {
                 "plantilla": plantilla_id,
-                "values": values
+                **values  # {'values':..., 'missing_required':..., 'debug':...}
             }
         except ValueError as ve:
             raise HTTPException(status_code=404, detail=str(ve))
         except Exception as e:
+            # Capturamos error pero devolvemos la extracción base
             result["template_based_extraction"] = {
                 "error": f"Error aplicando plantilla: {str(e)}",
                 "plantilla": plantilla_id,

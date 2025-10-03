@@ -1,8 +1,8 @@
+# services/pdfProcessor.py
 import fitz
 from typing import Dict, Any
 from .pageExtractor import PageExtractor
 from .statsAgregator import StatsAggregator
-
 
 class PdfProcessor:
     """Encargado de procesar el PDF completo"""
@@ -11,8 +11,6 @@ class PdfProcessor:
         self.page_extractor = page_extractor
 
     def process(self, file_path: str) -> Dict[str, Any]:
-        """Procesa un PDF y devuelve un resultado estructurado"""
-
         results = {
             "total_pages": 0,
             "pages": [],
@@ -31,9 +29,9 @@ class PdfProcessor:
 
                 for page_num, page in enumerate(doc, start=1):
                     page_result = self.page_extractor.extract(page, page_num)
+                    # page_result incluye: page, page_number, origin, rotation, sizes, blocks
                     results["pages"].append(page_result)
-                    stats.add(page_result["strategy_used"],  # <- corregido
-                              page_result["character_count"])
+                    stats.add(page_result["strategy_used"], page_result["character_count"])
 
             results["extraction_stats"].update(stats.to_dict())
             return results

@@ -2,8 +2,7 @@
 import io
 import os
 import subprocess
-from typing import Dict, List
-
+from typing import Dict, List, Tuple
 import fitz
 import pytesseract
 from PIL import Image
@@ -19,11 +18,21 @@ else:
     except Exception:
         print("❌ ADVERTENCIA: Tesseract no encontrado. Ajusta TESSERACT_PATH o agrega al PATH.")
 
+def _page_to_pil(page: "fitz.Page", dpi: int = 300, mode: str = "L") -> Image.Image:
+    mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+    pix = page.get_pixmap(matrix=mat)
+    return Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(mode)
+
 def extract_text_from_page_with_ocr(page: "fitz.Page", dpi: int = 300, lang: str = "spa+eng") -> str:
     img = _page_to_pil(page, dpi=dpi, mode="L")
     return (pytesseract.image_to_string(img, lang=lang, config="--oem 3 --psm 6") or "").strip()
 
-def extract_text_blocks_from_page_with_ocr_words(
+def _to_pdf_rect(ix0:int, iy0:int, iw:int, ih:int, scale:float) -> Tuple[float,float,float,float]:
+    x0 = ix0 / scale; y0 = iy0 / scale
+    x1 = (ix0 + iw) / scale; y1 = (iy0 + ih) / scale
+    return float(x0), float(y0), float(x1), float(y1)
+
+def extract_text_blocks_from_page_with_ocr_words_and_lines(
     page: "fitz.Page",
     page_num: int,
     dpi: int = 300,
@@ -31,8 +40,8 @@ def extract_text_blocks_from_page_with_ocr_words(
     min_conf: int = 50,
 ) -> List[Dict]:
     """
-    Devuelve bloques POR PALABRA con el mismo shape que nativo:
-    { page, block_number, coordinates (puntos PDF), text, type, flags }
+    Devuelve bloques de LINEA (primero) y de PALABRA (después), todos con coords en puntos PDF top-left.
+    Cada block: { page, block_number, coordinates:[x0,y0,x1,y1], text, type:0, flags:0, kind:"line"|"word" }
     """
     scale = dpi / 72.0
     img = _page_to_pil(page, dpi=dpi, mode="L")
@@ -44,17 +53,24 @@ def extract_text_blocks_from_page_with_ocr_words(
         config="--oem 3 --psm 6",
     )
 
-    words  = data.get("text", [])
-    confs  = data.get("conf", [])
-    lefts  = data.get("left", [])
-    tops   = data.get("top", [])
-    widths = data.get("width", [])
-    heights= data.get("height", [])
-
-    all_blocks: List[Dict] = []
-    block_no = 0
+    # Campos útiles de tesseract
+    words   = data.get("text", [])
+    confs   = data.get("conf", [])
+    lefts   = data.get("left", [])
+    tops    = data.get("top", [])
+    widths  = data.get("width", [])
+    heights = data.get("height", [])
+    bnums   = data.get("block_num", [])
+    pnums   = data.get("par_num", [])
+    lnums   = data.get("line_num", [])
+    # word_num no lo necesitamos para agrupar
     n = len(words)
 
+    line_groups: Dict[Tuple[int,int,int], List[int]] = {}  # (b,p,l) -> indices
+    word_blocks: List[Dict] = []
+    next_id = 0
+
+    # --- Palabras (filtradas por confianza) ---
     for i in range(n):
         w = (words[i] or "").strip()
         if not w:
@@ -66,29 +82,51 @@ def extract_text_blocks_from_page_with_ocr_words(
         if c < min_conf:
             continue
 
-        # bbox en píxeles
-        x0_px = int(lefts[i]);  y0_px = int(tops[i])
-        x1_px = x0_px + int(widths[i])
-        y1_px = y0_px + int(heights[i])
+        ix0 = int(lefts[i]); iy0 = int(tops[i])
+        iw  = int(widths[i]); ih = int(heights[i])
 
-        # a puntos PDF
-        x0, y0 = x0_px / scale, y0_px / scale
-        x1, y1 = x1_px / scale, y1_px / scale
+        x0, y0, x1, y1 = _to_pdf_rect(ix0, iy0, iw, ih, scale)
 
-        all_blocks.append({
+        word_blocks.append({
             "page": page_num,
-            "block_number": block_no,
-            "coordinates": (x0, y0, x1, y1),
+            "block_number": next_id,
+            "coordinates": [x0, y0, x1, y1],
             "text": w,
             "type": 0,
             "flags": 0,
+            "kind": "word",
         })
-        block_no += 1
+        next_id += 1
 
-    return all_blocks
+        key = (int(bnums[i]), int(pnums[i]), int(lnums[i]))
+        line_groups.setdefault(key, []).append(len(word_blocks) - 1)
 
-# helpers
-def _page_to_pil(page: "fitz.Page", dpi: int = 300, mode: str = "L") -> Image.Image:
-    mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
-    pix = page.get_pixmap(matrix=mat)
-    return Image.open(io.BytesIO(pix.tobytes("ppm"))).convert(mode)
+    # --- Líneas (agrupando palabras) ---
+    line_blocks: List[Dict] = []
+    for key, idxs in line_groups.items():
+        if not idxs:
+            continue
+        # bounding rect de la línea
+        xs0 = []; ys0 = []; xs1 = []; ys1 = []; parts = []
+        for wi in idxs:
+            wb = word_blocks[wi]
+            x0, y0, x1, y1 = wb["coordinates"]
+            xs0.append(x0); ys0.append(y0); xs1.append(x1); ys1.append(y1)
+            parts.append(wb["text"])
+        lx0, ly0, lx1, ly1 = min(xs0), min(ys0), max(xs1), max(ys1)
+        text_line = " ".join(parts).strip()
+        if not text_line:
+            continue
+        line_blocks.append({
+            "page": page_num,
+            "block_number": next_id,
+            "coordinates": [float(lx0), float(ly0), float(lx1), float(ly1)],
+            "text": text_line,
+            "type": 0,
+            "flags": 0,
+            "kind": "line",
+        })
+        next_id += 1
+
+    # Devolvemos primero las líneas (mejor para anclas), luego palabras (útil para fields finos)
+    return line_blocks + word_blocks
