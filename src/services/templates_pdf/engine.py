@@ -1,6 +1,6 @@
 # src/services/templates_pdf/engine.py
 from .repo import SQLTemplateRepository
-from .applier import TemplateApplier
+from .applier.applier import TemplateApplier
 from .schemas import Template
 
 class TemplateEngine:
@@ -27,5 +27,4 @@ class TemplateEngine:
         template = self.repo.get(template_id)
         if not template:
             raise ValueError(f"Template '{template_id}' no encontrado")
-        # ← ahora le pasamos include_debug al applier
         return self.applier.apply(template, pdf_text_blocks, include_debug=include_debug)
