@@ -1,4 +1,4 @@
-# src/services/extractors/ocr_text.py
+# src/services/extractors/ocr_text.py (patched to include 'conf' per word)
 import io
 import os
 import subprocess
@@ -37,11 +37,11 @@ def extract_text_blocks_from_page_with_ocr_words_and_lines(
     page_num: int,
     dpi: int = 300,
     lang: str = "spa+eng",
-    min_conf: int = 50,
+    min_conf: int = 40,
 ) -> List[Dict]:
     """
-    Devuelve bloques de LINEA (primero) y de PALABRA (después), todos con coords en puntos PDF top-left.
-    Cada block: { page, block_number, coordinates:[x0,y0,x1,y1], text, type:0, flags:0, kind:"line"|"word" }
+    Devuelve bloques de LINEA (primero) y de PALABRA (después)
+    Cada block: { page, block_number, coordinates:[x0,y0,x1,y1], text, type:0, flags:0, kind:"line"|"word", conf: int|None }
     """
     scale = dpi / 72.0
     img = _page_to_pil(page, dpi=dpi, mode="L")
@@ -53,7 +53,6 @@ def extract_text_blocks_from_page_with_ocr_words_and_lines(
         config="--oem 3 --psm 6",
     )
 
-    # Campos útiles de tesseract
     words   = data.get("text", [])
     confs   = data.get("conf", [])
     lefts   = data.get("left", [])
@@ -63,14 +62,12 @@ def extract_text_blocks_from_page_with_ocr_words_and_lines(
     bnums   = data.get("block_num", [])
     pnums   = data.get("par_num", [])
     lnums   = data.get("line_num", [])
-    # word_num no lo necesitamos para agrupar
     n = len(words)
 
-    line_groups: Dict[Tuple[int,int,int], List[int]] = {}  # (b,p,l) -> indices
+    line_groups: Dict[Tuple[int,int,int], List[int]] = {}
     word_blocks: List[Dict] = []
     next_id = 0
 
-    # --- Palabras (filtradas por confianza) ---
     for i in range(n):
         w = (words[i] or "").strip()
         if not w:
@@ -95,28 +92,30 @@ def extract_text_blocks_from_page_with_ocr_words_and_lines(
             "type": 0,
             "flags": 0,
             "kind": "word",
+            "conf": c,
         })
         next_id += 1
 
         key = (int(bnums[i]), int(pnums[i]), int(lnums[i]))
         line_groups.setdefault(key, []).append(len(word_blocks) - 1)
 
-    # --- Líneas (agrupando palabras) ---
     line_blocks: List[Dict] = []
     for key, idxs in line_groups.items():
         if not idxs:
             continue
-        # bounding rect de la línea
-        xs0 = []; ys0 = []; xs1 = []; ys1 = []; parts = []
+        xs0 = []; ys0 = []; xs1 = []; ys1 = []; parts = []; confs_line = []
         for wi in idxs:
             wb = word_blocks[wi]
             x0, y0, x1, y1 = wb["coordinates"]
             xs0.append(x0); ys0.append(y0); xs1.append(x1); ys1.append(y1)
             parts.append(wb["text"])
+            if wb.get("conf") is not None:
+                confs_line.append(wb["conf"])
         lx0, ly0, lx1, ly1 = min(xs0), min(ys0), max(xs1), max(ys1)
         text_line = " ".join(parts).strip()
         if not text_line:
             continue
+        avg_conf = int(sum(confs_line)/len(confs_line)) if confs_line else None
         line_blocks.append({
             "page": page_num,
             "block_number": next_id,
@@ -125,8 +124,8 @@ def extract_text_blocks_from_page_with_ocr_words_and_lines(
             "type": 0,
             "flags": 0,
             "kind": "line",
+            "conf": avg_conf,
         })
         next_id += 1
 
-    # Devolvemos primero las líneas (mejor para anclas), luego palabras (útil para fields finos)
     return line_blocks + word_blocks

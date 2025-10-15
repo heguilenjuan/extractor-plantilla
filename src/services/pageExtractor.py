@@ -10,10 +10,10 @@ class PageExtractor:
 
     Retorna un dict por página con:
       {
-        "page": int,                 # ← agregado (además de page_number)
+        "page": int,    
         "page_number": int,
-        "origin": "top-left",        # ← agregado (consistencia con applier/controller)
-        "rotation": int,             # ← agregado (grados)
+        "origin": "top-left",
+        "rotation": int,
         "strategy_used": "native_text" | "ocr" | <otro>,
         "page_width": float,
         "page_height": float,
@@ -25,7 +25,7 @@ class PageExtractor:
             "page": int,
             "page_width": float,
             "page_height": float,
-            "coordinates": [x0, y0, x1, y1],  # floats, top-left
+            "coordinates": [x0, y0, x1, y1],
             "text": str
           },
           ...
@@ -40,16 +40,15 @@ class PageExtractor:
         self._strategies = strategies
 
     def extract(self, page, page_num: int) -> Dict:
-        # PyMuPDF (fitz) expone top-left con y creciente hacia abajo
         pw = float(page.rect.width)
         ph = float(page.rect.height)
-        rotation = int(getattr(page, "rotation", 0))  # 0, 90, 180, 270
+        rotation = int(getattr(page, "rotation", 0))
 
         result = {
-            "page": page_num,                 # ← agregado
+            "page": page_num,                
             "page_number": page_num,
-            "origin": "top-left",             # ← agregado
-            "rotation": rotation,             # ← agregado
+            "origin": "top-left",            
+            "rotation": rotation,            
             "strategy_used": None,
             "page_width": pw,
             "page_height": ph,

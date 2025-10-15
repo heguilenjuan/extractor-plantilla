@@ -8,7 +8,7 @@ class IPageExtractor(Protocol):
 
     def can_handle(self, page) -> bool:
         """Indica si esta estrategia puede manejar la página."""
-        ...
+        return True
 
     def extract(self, page, page_num: int) -> Tuple[str, List[Dict]]:
         """

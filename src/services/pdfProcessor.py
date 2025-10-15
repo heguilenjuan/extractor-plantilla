@@ -6,10 +6,8 @@ from .statsAgregator import StatsAggregator
 
 class PdfProcessor:
     """Encargado de procesar el PDF completo"""
-
     def __init__(self, page_extractor: PageExtractor):
         self.page_extractor = page_extractor
-
     def process(self, file_path: str) -> Dict[str, Any]:
         results = {
             "total_pages": 0,
@@ -20,21 +18,16 @@ class PdfProcessor:
                 "total_characters": 0,
             }
         }
-
         stats = StatsAggregator()
-
         try:
             with fitz.open(file_path) as doc:
                 results["total_pages"] = len(doc)
 
                 for page_num, page in enumerate(doc, start=1):
                     page_result = self.page_extractor.extract(page, page_num)
-                    # page_result incluye: page, page_number, origin, rotation, sizes, blocks
                     results["pages"].append(page_result)
                     stats.add(page_result["strategy_used"], page_result["character_count"])
-
             results["extraction_stats"].update(stats.to_dict())
             return results
-
         except Exception as e:
             raise Exception(f"Error procesando PDF: {str(e)}")

@@ -1,14 +1,10 @@
 # templates_controller.py
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, List, Tuple
-from src.services.templates_pdf.engine import TemplateEngine
+from typing import Dict, Any, List
 from src.config import create_template_engine
-import math
 
 router = APIRouter(prefix="/api/v1/templates", tags=["Templates"])
 template_engine = create_template_engine()
-
-# ---------- helpers de validación ----------
 
 def _to_int_pages_keyed(pages: Dict[Any, Any]) -> Dict[int, Any]:
     # normaliza claves "1" -> 1
@@ -76,7 +72,6 @@ def _validate_meta(meta: Dict[str, Any], boxes: List[Dict[str, Any]]):
             _validate_anchor(a, page, i)
 
 # ---------- endpoints ----------
-
 @router.get("")
 def list_templates():
     try:
@@ -91,19 +86,16 @@ def get_template(template_id: str):
         tpl = template_engine.get_template(template_id)
         if not tpl:
             raise HTTPException(status_code=404, detail="Plantilla no encontrada")
-
-        # normalizar claves de pages a int al responder (comodidad FE)
         meta = tpl.meta or {}
         if isinstance(meta.get("pages"), dict):
             meta["pages"] = _to_int_pages_keyed(meta["pages"])
-            tpl.meta = meta
+            tpl.meta = meta 
         return tpl
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener plantilla: {str(e)}")
 
-@router.post("")
 @router.post("")
 def create_template(payload: Dict[str, Any]):
     try:
@@ -143,7 +135,6 @@ def delete_template(template_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar plantilla: {str(e)}")
 
-# ---------- endpoint opcional para probar extracción ----------
 
 @router.post("/{template_id}/apply")
 def apply_template(template_id: str, payload: Dict[str, Any]):
